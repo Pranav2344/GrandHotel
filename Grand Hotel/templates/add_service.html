@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Add Service - Hotel Billing System{% endblock %}
+
+{% block content %}
+<div class="add-service-page">
+    <h2>Add Service to Booking #{{ booking.booking_id }}</h2>
+    
+    <div class="booking-info">
+        <div class="info-card">
+            <svg class="info-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div>
+                <p class="info-label">Guest</p>
+                <p class="info-value">{{ booking.first_name }} {{ booking.last_name }}</p>
+            </div>
+        </div>
+        <div class="info-card">
+            <svg class="info-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M9 22V12H15V22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div>
+                <p class="info-label">Room</p>
+                <p class="info-value">{{ booking.room_number }} - {{ booking.room_type }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <form method="POST" class="service-form">
+        <div class="form-group">
+            <label for="service_id">
+                <svg class="label-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9 11L12 14L22 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M21 12V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Select Service *
+            </label>
+            <select id="service_id" name="service_id" required onchange="updatePrice()" class="service-select">
+                <option value="">Choose a service...</option>
+                {% for service in services %}
+                <option value="{{ service.service_id }}" data-price="{{ service.service_price }}">
+                    {{ service.service_name }} - ₹{{ "%.2f"|format(service.service_price) }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="quantity">Quantity *</label>
+            <input type="number" id="quantity" name="quantity" min="1" value="1" required onchange="updatePrice()">
+        </div>
+        
+        <div id="pricePreview" class="price-preview" style="display:none;">
+            <p><strong>Total:</strong> <span id="totalPrice">₹0.00</span></p>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-success">Add Service</button>
+            <a href="{{ url_for('booking_details', booking_id=booking.booking_id) }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updatePrice() {
+    const select = document.getElementById('service_id');
+    const quantity = document.getElementById('quantity').value;
+    const selectedOption = select.options[select.selectedIndex];
+    
+    if (selectedOption.value && quantity > 0) {
+        const price = parseFloat(selectedOption.dataset.price);
+        const total = price * quantity;
+        document.getElementById('totalPrice').textContent = '₹' + total.toFixed(2);
+        document.getElementById('pricePreview').style.display = 'block';
+    } else {
+        document.getElementById('pricePreview').style.display = 'none';
+    }
+}
+</script>
+{% endblock %}

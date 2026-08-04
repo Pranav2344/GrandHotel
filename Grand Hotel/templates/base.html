@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Professional Hotel Billing System - Manage rooms, reservations, check-ins, check-outs, and billing efficiently">
+    <meta name="author" content="Hotel Billing System">
+    <meta name="theme-color" content="#6366f1">
+    <title>{% block title %}Hotel Billing System{% endblock %}</title>
+    
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=25.0">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h1>
+                    <span class="brand-mark" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M4 21V7.5C4 6.67 4.67 6 5.5 6H9V4.5C9 3.67 9.67 3 10.5 3H13.5C14.33 3 15 3.67 15 4.5V6H18.5C19.33 6 20 6.67 20 7.5V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M9 21V16.5C9 15.67 9.67 15 10.5 15H13.5C14.33 15 15 15.67 15 16.5V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M7.5 9.5H7.51M12 9.5H12.01M16.5 9.5H16.51M7.5 12.5H7.51M12 12.5H12.01M16.5 12.5H16.51" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <span class="brand-title">
+                        Hotel Billing System
+                        <span class="brand-subtitle">Grand Hotel</span>
+                    </span>
+                </h1>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="{{ url_for('index') }}">Dashboard</a></li>
+                <li><a href="{{ url_for('rooms') }}">Rooms</a></li>
+                <li><a href="{{ url_for('checkin') }}">Check-In</a></li>
+                <li><a href="{{ url_for('checkout') }}">Check-Out</a></li>
+                <li><a href="{{ url_for('bills') }}">Bills</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        {{ message }}
+                        <span class="close-btn" onclick="this.parentElement.style.display='none'">&times;</span>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Hotel Billing System. All rights reserved.</p>
+            <p style="margin-top: 0.5rem; font-size: 0.875rem; opacity: 0.8;">Professional Hotel Management Solution</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}?v=5.0"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+
+{% block title %}Invoice #{{ bill.bill_id }} - Hotel Billing System{% endblock %}
+
+{% block content %}
+<style>
+    .invoice-page {
+        max-width: 860px;
+        margin: 0 auto 2rem;
+        background: #ffffff;
+        border: 1px solid #d5d8de;
+        padding: 2rem 2.2rem;
+        color: #111111;
+    }
+
+    .invoice-page * {
+        box-sizing: border-box;
+    }
+
+    .invoice-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.6rem;
+    }
+
+    .invoice-title,
+    .hotel-title {
+        margin: 0;
+        color: #005dff;
+        font-size: 2rem;
+        line-height: 1.1;
+        font-weight: 700;
+    }
+
+    .invoice-meta {
+        margin-top: 0.45rem;
+        text-align: right;
+        font-size: 0.84rem;
+        line-height: 1.35;
+    }
+
+    .hotel-meta {
+        text-align: left;
+        font-size: 0.8rem;
+        line-height: 1.4;
+    }
+
+    .hotel-meta p {
+        margin: 0.2rem 0;
+    }
+
+    .invoice-divider {
+        border-top: 2px solid #1f2937;
+        margin: 1rem 0 1.4rem;
+    }
+
+    .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+        margin-bottom: 1.8rem;
+    }
+
+    .two-col h3 {
+        margin: 0 0 0.55rem;
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .two-col p {
+        margin: 0.22rem 0;
+        font-size: 0.92rem;
+        line-height: 1.45;
+    }
+
+    .charges-title {
+        margin: 0 0 0.6rem;
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .charges-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1.25rem;
+    }
+
+    .charges-table th,
+    .charges-table td {
+        padding: 0.58rem 0.5rem;
+        font-size: 0.88rem;
+        border-bottom: 1px solid #d9dee7;
+    }
+
+    .charges-table th {
+        color: #7c8798;
+        font-weight: 600;
+    }
+
+    .charges-table th:first-child,
+    .charges-table td:first-child {
+        text-align: left;
+    }
+
+    .charges-table th:nth-child(2),
+    .charges-table th:nth-child(3),
+    .charges-table td:nth-child(2),
+    .charges-table td:nth-child(3) {
+        text-align: center;
+    }
+
+    .charges-table th:last-child,
+    .charges-table td:last-child {
+        text-align: right;
+    }
+
+    .charges-row-main td {
+        font-weight: 600;
+        color: #111111;
+    }
+
+    .summary-box {
+        width: 100%;
+        max-width: 420px;
+        margin-left: auto;
+    }
+
+    .summary-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .summary-table td {
+        padding: 0.45rem 0;
+        font-size: 0.9rem;
+        border-bottom: 1px solid #d9dee7;
+    }
+
+    .summary-table td:last-child {
+        text-align: right;
+    }
+
+    .summary-total td {
+        border-top: 2px solid #1f2937;
+        border-bottom: 2px solid #1f2937;
+        padding: 0.65rem 0;
+        font-size: 1.9rem;
+        font-weight: 700;
+        color: #005dff;
+    }
+
+    .summary-total td:first-child {
+        font-size: 1.5rem;
+    }
+
+    .summary-total td:last-child {
+        font-size: 2rem;
+    }
+
+    .invoice-footer-line {
+        border-top: 1px solid #d9dee7;
+        margin: 1.8rem 0 1.2rem;
+    }
+
+    .invoice-footer {
+        text-align: center;
+    }
+
+    .invoice-footer p {
+        margin: 0.3rem 0;
+    }
+
+    .invoice-footer .thanks {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #005dff;
+    }
+
+    .invoice-footer .terms {
+        font-size: 0.78rem;
+        color: #4b5563;
+    }
+
+    @media (max-width: 900px) {
+        .invoice-page {
+            padding: 1.2rem;
+        }
+
+        .hotel-title,
+        .invoice-title {
+            font-size: 1.45rem;
+        }
+
+        .summary-total td:last-child {
+            font-size: 1.5rem;
+        }
+    }
+
+    @media (max-width: 700px) {
+        .invoice-header {
+            gap: 1rem;
+        }
+
+        .two-col {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+
+        .charges-table {
+            display: block;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .summary-total td {
+            font-size: 1.2rem;
+        }
+
+        .summary-total td:first-child {
+            font-size: 1.05rem;
+        }
+
+        .summary-total td:last-child {
+            font-size: 1.3rem;
+        }
+    }
+
+    @media print {
+        .no-print {
+            display: none !important;
+        }
+
+        .invoice-page {
+            border: none;
+            margin: 0;
+            max-width: none;
+            padding: 0;
+        }
+    }
+</style>
+
+<div class="invoice-page">
+    <div class="invoice-header">
+        <div>
+            <h1 class="hotel-title">Grand Hotel</h1>
+            <div class="hotel-meta">
+                <p>123 Main Street, City Center</p>
+                <p>Phone: +91 1234567890 | Email: info@grandhotel.com</p>
+                <p>GSTIN: 12ABCDE3456F1Z5</p>
+            </div>
+        </div>
+
+        <div>
+            <h1 class="invoice-title">INVOICE</h1>
+            <div class="invoice-meta">
+                <p><strong>Invoice #:</strong> {{ bill.bill_id }}</p>
+                <p><strong>Date:</strong> {{ bill.bill_date }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="invoice-divider"></div>
+
+    <div class="two-col">
+        <div>
+            <h3>Customer Details</h3>
+            <p><strong>Name:</strong> {{ bill.first_name }} {{ bill.last_name }}</p>
+            <p><strong>Email:</strong> {{ bill.email or 'N/A' }}</p>
+            <p><strong>Phone:</strong> {{ bill.phone }}</p>
+            <p><strong>ID Type:</strong> {{ bill.id_proof_type }}</p>
+            <p><strong>Address:</strong> {{ bill.address or 'N/A' }}</p>
+        </div>
+
+        <div>
+            <h3>Booking Details</h3>
+            <p><strong>Booking ID:</strong> #{{ bill.booking_id }}</p>
+            <p><strong>Room:</strong> {{ bill.room_number }} - {{ bill.room_type }}</p>
+            <p><strong>Check-In:</strong> {{ bill.check_in_date }}</p>
+            <p><strong>Check-Out:</strong> {{ bill.check_out_date }}</p>
+            <p><strong>Duration:</strong> {{ nights }} Night{{ 's' if nights != 1 else '' }}</p>
+        </div>
+    </div>
+
+    <h3 class="charges-title">Charges Breakdown</h3>
+    <table class="charges-table">
+        <thead>
+            <tr>
+                <th>Description</th>
+                <th>Quantity</th>
+                <th>Per Unit</th>
+                <th>Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="charges-row-main">
+                <td>{{ bill.room_type }} - Room {{ bill.room_number }} ({{ nights }} Night{{ 's' if nights != 1 else '' }} x {{ bill.number_of_guests }} guests)</td>
+                <td>{{ nights }} night(s) x</td>
+                <td>₹{{ "%.2f"|format(bill.price_per_night) }}/person/night</td>
+                <td>₹{{ "%.2f"|format(bill.room_charges) }}</td>
+            </tr>
+            {% if services %}
+            {% for service in services %}
+            <tr>
+                <td>{{ service.service_name }}</td>
+                <td>{{ service.quantity }}</td>
+                <td>₹{{ "%.2f"|format(service.service_price) }}</td>
+                <td>₹{{ "%.2f"|format(service.service_price * service.quantity) }}</td>
+            </tr>
+            {% endfor %}
+            {% endif %}
+        </tbody>
+    </table>
+
+    <div class="summary-box">
+        <table class="summary-table">
+            <tr>
+                <td>Subtotal:</td>
+                <td>₹{{ "%.2f"|format(bill.room_charges + bill.service_charges) }}</td>
+            </tr>
+            <tr>
+                <td>Tax (12% GST):</td>
+                <td>₹{{ "%.2f"|format(bill.tax_amount) }}</td>
+            </tr>
+            {% if bill.discount > 0 %}
+            <tr>
+                <td>Discount:</td>
+                <td>-₹{{ "%.2f"|format(bill.discount) }}</td>
+            </tr>
+            {% endif %}
+            <tr class="summary-total">
+                <td>Total Amount:</td>
+                <td>₹{{ "%.2f"|format(bill.total_amount) }}</td>
+            </tr>
+            <tr>
+                <td>Payment Method:</td>
+                <td>{{ bill.payment_method }}</td>
+            </tr>
+            <tr>
+                <td>Payment Status:</td>
+                <td>{{ bill.payment_status|upper }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="invoice-footer-line"></div>
+    <div class="invoice-footer">
+        <p class="thanks">Thank you for choosing Grand Hotel!</p>
+        <p class="terms">Terms &amp; Conditions: Payment is due upon receipt. All charges are non-refundable.</p>
+    </div>
+
+    <div class="form-actions no-print" style="margin-top: 1.6rem;">
+        <button onclick="window.print()" class="btn btn-primary">Print Invoice</button>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}

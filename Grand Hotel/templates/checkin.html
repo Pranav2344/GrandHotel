@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Check-In - Hotel Billing System{% endblock %}
+
+{% block content %}
+<div class="checkin-page">
+    <h2>Guest Check-In</h2>
+    
+    <form method="POST" class="checkin-form" onsubmit="return validateForm('checkinForm')" id="checkinForm">
+        <div class="form-section">
+            <h3>Guest Information</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="first_name">First Name *</label>
+                    <input type="text" id="first_name" name="first_name" required placeholder="Enter first name">
+                </div>
+                <div class="form-group">
+                    <label for="last_name">Last Name *</label>
+                    <input type="text" id="last_name" name="last_name" required placeholder="Enter last name">
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" placeholder="guest@example.com" onchange="validateEmail(this)">
+                </div>
+                <div class="form-group">
+                    <label for="phone">Phone *</label>
+                    <input type="tel" id="phone" name="phone" required placeholder="10-digit mobile number" onchange="validatePhone(this)">
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_proof_type">ID Proof Type *</label>
+                    <select id="id_proof_type" name="id_proof_type" required>
+                        <option value="">Select ID Proof</option>
+                        <option value="Aadhar Card">Aadhar Card</option>
+                        <option value="Passport">Passport</option>
+                        <option value="Driver's License">Driver's License</option>
+                        <option value="Voter ID">Voter ID</option>
+                        <option value="PAN Card">PAN Card</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="id_proof_number">ID Proof Number *</label>
+                    <input type="text" id="id_proof_number" name="id_proof_number" required placeholder="Enter ID proof number">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="address">Address</label>
+                <textarea id="address" name="address" rows="3" placeholder="Enter full address (optional)"></textarea>
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h3>Booking Information</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="room_id">Select Room *</label>
+                    <select id="room_id" name="room_id" required onchange="updateGuestLimit()">
+                        <option value="">Choose a room</option>
+                        {% for room in rooms %}
+                        <option value="{{ room.room_id }}" data-capacity="{{ room.capacity }}" data-number="{{ room.room_number }}">
+                            Room {{ room.room_number }} - {{ room.room_type }} (Capacity: {{ room.capacity }}) - ₹{{ "%.2f"|format(room.price_per_night) }}/night
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <small id="capacityError" style="color: var(--danger-color); display: none; margin-top: 0.5rem;"></small>
+                </div>
+                <div class="form-group">
+                    <label for="number_of_guests">Number of Guests * <span id="capacityInfo" style="font-weight: normal; color: var(--secondary-color);"></span></label>
+                    <input type="number" id="number_of_guests" name="number_of_guests" min="1" required onchange="validateGuestCount()" placeholder="Enter number of guests">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="check_in_date">Check-In Date *</label>
+                <input type="date" id="check_in_date" name="check_in_date" value="{{ today }}" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="special_requests">Special Requests</label>
+                <textarea id="special_requests" name="special_requests" rows="3" placeholder="Any special requirements or requests..."></textarea>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-success" id="submitBtn">Complete Check-In</button>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let maxCapacity = 0;
+
+function updateGuestLimit() {
+    const roomSelect = document.getElementById('room_id');
+    const selectedOption = roomSelect.options[roomSelect.selectedIndex];
+    const guestInput = document.getElementById('number_of_guests');
+    const capacityError = document.getElementById('capacityError');
+    const capacityInfo = document.getElementById('capacityInfo');
+    
+    if (selectedOption.value) {
+        maxCapacity = parseInt(selectedOption.dataset.capacity);
+        const roomNumber = selectedOption.dataset.number;
+        
+        // Update max attribute on input
+        guestInput.max = maxCapacity;
+        
+        // Show capacity info
+        capacityInfo.textContent = `(Max: ${maxCapacity})`;
+        capacityInfo.style.color = 'var(--secondary-color)';
+        capacityInfo.style.fontSize = '0.875rem';
+        
+        // Clear previous error
+        capacityError.style.display = 'none';
+        capacityError.textContent = '';
+        
+        // Reset guest count if it exceeds capacity
+        if (parseInt(guestInput.value) > maxCapacity) {
+            guestInput.value = maxCapacity;
+        }
+    } else {
+        maxCapacity = 0;
+        capacityInfo.textContent = '';
+        guestInput.max = '';
+    }
+}
+
+function validateGuestCount() {
+    const guestInput = document.getElementById('number_of_guests');
+    const roomSelect = document.getElementById('room_id');
+    const selectedOption = roomSelect.options[roomSelect.selectedIndex];
+    const capacityError = document.getElementById('capacityError');
+    
+    if (!selectedOption.value) {
+        capacityError.style.display = 'block';
+        capacityError.textContent = 'Please select a room first';
+        return false;
+    }
+    
+    const capacity = parseInt(selectedOption.dataset.capacity);
+    const guests = parseInt(guestInput.value);
+    
+    if (guests > capacity) {
+        capacityError.style.display = 'block';
+        capacityError.textContent = `Room capacity is ${capacity}. You cannot enter more than ${capacity} guest(s).`;
+        guestInput.value = capacity;
+        return false;
+    } else if (guests < 1) {
+        capacityError.style.display = 'block';
+        capacityError.textContent = 'At least 1 guest is required';
+        return false;
+    } else {
+        capacityError.style.display = 'none';
+        capacityError.textContent = '';
+        return true;
+    }
+}
+
+// Validate on form submission
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('.checkin-form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (!validateGuestCount()) {
+                e.preventDefault();
+                return false;
+            }
+            // Form is valid, allow submission
+            return true;
+        });
+    }
+    
+    // Allow form submission once all basic fields are filled
+    const guestInput = document.getElementById('number_of_guests');
+    if (guestInput) {
+        guestInput.addEventListener('change', function() {
+            validateGuestCount();
+        });
+    }
+});
+</script>
+{% endblock %}

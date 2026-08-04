@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}All Bills - Hotel Billing System{% endblock %}
+
+{% block content %}
+<div class="bills-page">
+    <h2>All Bills</h2>
+    
+    {% if bills %}
+    <div class="bills-toolbar">
+        <div class="bills-search">
+            <label for="billSearch">Search Bill</label>
+            <input
+                type="text"
+                id="billSearch"
+                placeholder="Search by Bill ID, guest, room, date, or amount"
+            >
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="data-table" id="billsTable">
+            <thead>
+                <tr>
+                    <th>Bill ID</th>
+                    <th>Guest Name</th>
+                    <th>Room</th>
+                    <th>Check-In</th>
+                    <th>Check-Out</th>
+                    <th>Total Amount</th>
+                    <th>Payment Status</th>
+                    <th>Bill Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for bill in bills %}
+                <tr>
+                    <td>#{{ bill.bill_id }}</td>
+                    <td>{{ bill.first_name }} {{ bill.last_name }}</td>
+                    <td>{{ bill.room_number }}</td>
+                    <td>{{ bill.check_in_date }}</td>
+                    <td>{{ bill.check_out_date }}</td>
+                    <td>₹{{ "%.2f"|format(bill.total_amount) }}</td>
+                    <td><span class="status-badge status-{{ bill.payment_status|lower }}">{{ bill.payment_status }}</span></td>
+                    <td>{{ bill.bill_date }}</td>
+                    <td>
+                        <a href="{{ url_for('invoice', bill_id=bill.bill_id) }}" class="btn btn-small btn-primary">View Invoice</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p id="billSearchNoResults" class="no-data" style="display: none;">No bills matched your search.</p>
+    {% else %}
+    <p class="no-data">No bills generated yet.</p>
+    {% endif %}
+    
+    <div class="page-actions">
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('billSearch');
+    const billsTable = document.getElementById('billsTable');
+    const noResults = document.getElementById('billSearchNoResults');
+
+    if (!searchInput || !billsTable || !noResults) {
+        return;
+    }
+
+    const updateNoResultsState = function() {
+        const rows = billsTable.querySelectorAll('tbody tr');
+        const hasVisibleRows = Array.from(rows).some(row => row.style.display !== 'none');
+        noResults.style.display = hasVisibleRows ? 'none' : 'block';
+    };
+
+    searchInput.addEventListener('input', function() {
+        filterTable('billSearch', 'billsTable');
+        updateNoResultsState();
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Rooms - Hotel Billing System{% endblock %}
+
+{% block content %}
+<div class="rooms-page">
+    <h2>Hotel Room Catalog</h2>
+    
+    <div class="info-box">
+        <h4>Room Status Guide</h4>
+        <p><strong>Available:</strong> Ready for booking and check-in</p>
+        <p><strong>Occupied:</strong> Currently reserved by guests</p>
+    </div>
+    
+    <div class="rooms-grid">
+        {% for room in rooms %}
+        {% set room_type = room.room_type|lower %}
+        {% set room_description = room.description|lower %}
+        {% set room_number = room.room_number %}
+        
+        {# Default image #}
+        {% set room_image = 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1400&q=80' %}
+
+        {# Presidential Suite - Ultra luxury #}
+        {% if 'presidential' in room_type or 'private terrace' in room_description %}
+            {% set room_image = 'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=1400&q=80' %}
+        
+        {# Executive Suite - Premium with jacuzzi #}
+        {% elif 'executive suite' in room_type and 'jacuzzi' in room_description %}
+            {% set room_image = 'https://images.unsplash.com/photo-1631049552240-59c37f38802b?auto=format&fit=crop&w=1400&q=80' %}
+        
+        {# Executive Family Suite - Large family room #}
+        {% elif 'executive family' in room_type or ('family' in room_type and 'queen beds' in room_description) %}
+            {% set room_image = 'https://images.unsplash.com/photo-1566195992011-5f6b21e539aa?auto=format&fit=crop&w=1400&q=80' %}
+        
+        {# Deluxe Suite with balcony #}
+        {% elif 'deluxe' in room_type and 'balcony' in room_description %}
+            {% set room_image = 'https://images.unsplash.com/photo-1591088398332-8a7791972843?auto=format&fit=crop&w=1400&q=80' %}
+        
+        {# Deluxe Suite with living area #}
+        {% elif 'deluxe' in room_type and 'living area' in room_description %}
+            {% set room_image = 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1400&q=80' %}
+        
+        {# Premium Double - Business style #}
+        {% elif 'premium' in room_type and ('work desk' in room_description or 'minibar' in room_description) %}
+            {% set room_image = 'https://images.unsplash.com/photo-1445019980597-93fa8acb246c?auto=format&fit=crop&w=1400&q=80' %}
+        
+        {# Standard Double with city view #}
+        {% elif 'standard double' in room_type and 'city view' in room_description %}
+            {% set room_image = 'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=1400&q=80' %}
+        
+        {# Standard Double with garden view #}
+        {% elif 'standard double' in room_type and 'garden view' in room_description %}
+            {% set room_image = 'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&w=1400&q=80' %}
+        
+        {# Standard Single - Cozy #}
+        {% elif 'standard single' in room_type and 'cozy' in room_description %}
+            {% set room_image = 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=1400&q=80' %}
+        
+        {# Economy Single - Budget friendly #}
+        {% elif 'economy' in room_type or 'budget' in room_description %}
+            {% set room_image = 'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?auto=format&fit=crop&w=1400&q=80' %}
+        
+        {# Any other deluxe #}
+        {% elif 'deluxe' in room_type %}
+            {% set room_image = 'https://images.unsplash.com/photo-1591088398332-8a7791972843?auto=format&fit=crop&w=1400&q=80' %}
+        {% endif %}
+
+        <div class="room-card {% if room.status == 'Occupied' %}occupied{% endif %}">
+            <div class="room-image-wrap">
+                <img src="{{ room_image }}" class="room-image" alt="{{ room.room_type }} interior" loading="lazy">
+            </div>
+            <div class="room-header">
+                <h3>Room {{ room.room_number }}</h3>
+                <span class="status-badge status-{{ room.status|lower }}">{{ room.status }}</span>
+            </div>
+            <div class="room-body">
+                <p class="room-type">{{ room.room_type }}</p>
+                <p class="room-description">{{ room.description }}</p>
+                <div class="room-details">
+                    <div class="detail">
+                        <span class="label">Capacity:</span>
+                        <span class="value">{{ room.capacity }} {% if room.capacity == 1 %}Person{% else %}People{% endif %}</span>
+                    </div>
+                    <div class="detail">
+                        <span class="label">Price:</span>
+                        <span class="value price">₹{{ "%.2f"|format(room.price_per_night) }}/night</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
