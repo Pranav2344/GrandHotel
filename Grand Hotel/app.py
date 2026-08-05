@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-import database as db
+from . import database as db
+
 
 
 def _as_date(value):
