@@ -1,1 +1,1 @@
-uvicorn "Grand Hotel".app:app --host 0.0.0.0 --port 10000
+web: uvicorn "Grand Hotel".app:app --host 0.0.0.0 --port 10000
