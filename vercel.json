@@ -1,0 +1,8 @@
+{
+  "builds": [
+    { "src": "Grand Hotel/app.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "Grand Hotel/app.py" }
+  ]
+}
