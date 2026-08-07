@@ -13,6 +13,10 @@ except ImportError:
 DATABASE_URL = os.environ.get('DATABASE_URL')
 SQLITE_DB_PATH = os.environ.get('SQLITE_DB_PATH', '/tmp/grand_hotel.db')
 
+# Tax rate applied to (room_charges + service_charges) when calculating a bill.
+# Override by setting the TAX_RATE env var, e.g. TAX_RATE=0.12 for 12%.
+TAX_RATE = float(os.environ.get('TAX_RATE', '0.18'))
+
 DEFAULT_ROOMS = [
     ('101', 'Standard Single', 1500.00, 1, 'Cozy single room with basic amenities'),
     ('102', 'Standard Double', 2500.00, 2, 'Comfortable double room with city view'),
@@ -56,7 +60,7 @@ def _to_float(value):
     return value
 
 
-# Write Aiven CA certificate to /tmp at startup (Vercel filesystem is read-only
+# Write Aiven CA certificate to /tmp at startup (Vercel's filesystem is read-only
 # except /tmp, so the cert content is stored in an env var and written out here).
 def _write_ssl_ca_if_needed():
     """Write Aiven CA cert from env var content to /tmp so pymysql can read it."""
@@ -104,42 +108,140 @@ def _uses_sqlite_backend():
     return not DATABASE_URL or DATABASE_URL.startswith('sqlite://')
 
 
-SQLITE_SCHEMA = '''
+# ---------------------------------------------------------------------------
+# Schema — matches mysql_schema.sql exactly (table/column names preserved)
+# ---------------------------------------------------------------------------
+
+MYSQL_TABLES = '''
 CREATE TABLE IF NOT EXISTS rooms (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    room_number TEXT UNIQUE NOT NULL,
-    room_type TEXT NOT NULL,
-    price REAL NOT NULL,
-    capacity INTEGER NOT NULL,
-    description TEXT,
-    status TEXT NOT NULL DEFAULT 'available'
+    room_id INT PRIMARY KEY AUTO_INCREMENT,
+    room_number VARCHAR(10) UNIQUE NOT NULL,
+    room_type VARCHAR(50) NOT NULL,
+    price_per_night DECIMAL(10, 2) NOT NULL,
+    status VARCHAR(20) DEFAULT 'Available',
+    capacity INT NOT NULL,
+    description TEXT
 );
 
 CREATE TABLE IF NOT EXISTS customers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    email TEXT,
-    phone TEXT,
+    customer_id INT PRIMARY KEY AUTO_INCREMENT,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100),
+    phone VARCHAR(20) NOT NULL,
+    id_proof_type VARCHAR(50) NOT NULL,
+    id_proof_number VARCHAR(50) NOT NULL,
     address TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS bookings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_id INTEGER NOT NULL,
-    room_id INTEGER NOT NULL,
-    check_in DATE NOT NULL,
-    check_out DATE,
-    status TEXT NOT NULL DEFAULT 'active',
+    booking_id INT PRIMARY KEY AUTO_INCREMENT,
+    customer_id INT NOT NULL,
+    room_id INT NOT NULL,
+    check_in_date DATE NOT NULL,
+    check_out_date DATE,
+    number_of_guests INT NOT NULL,
+    booking_status VARCHAR(20) DEFAULT 'Active',
+    special_requests TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (customer_id) REFERENCES customers (id),
-    FOREIGN KEY (room_id) REFERENCES rooms (id)
+    CONSTRAINT fk_bookings_customer
+        FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+    CONSTRAINT fk_bookings_room
+        FOREIGN KEY (room_id) REFERENCES rooms(room_id)
 );
 
 CREATE TABLE IF NOT EXISTS services (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE NOT NULL,
-    price REAL NOT NULL,
+    service_id INT PRIMARY KEY AUTO_INCREMENT,
+    service_name VARCHAR(100) NOT NULL,
+    service_price DECIMAL(10, 2) NOT NULL,
+    description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS booking_services (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    booking_id INT NOT NULL,
+    service_id INT NOT NULL,
+    quantity INT DEFAULT 1,
+    service_date DATE DEFAULT (CURRENT_DATE),
+    CONSTRAINT fk_booking_services_booking
+        FOREIGN KEY (booking_id) REFERENCES bookings(booking_id),
+    CONSTRAINT fk_booking_services_service
+        FOREIGN KEY (service_id) REFERENCES services(service_id)
+);
+
+CREATE TABLE IF NOT EXISTS bills (
+    bill_id INT PRIMARY KEY AUTO_INCREMENT,
+    booking_id INT NOT NULL,
+    room_charges DECIMAL(10, 2) NOT NULL,
+    service_charges DECIMAL(10, 2) DEFAULT 0,
+    tax_amount DECIMAL(10, 2) NOT NULL,
+    discount DECIMAL(10, 2) DEFAULT 0,
+    total_amount DECIMAL(10, 2) NOT NULL,
+    payment_status VARCHAR(20) DEFAULT 'Pending',
+    payment_method VARCHAR(50),
+    bill_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_bills_booking
+        FOREIGN KEY (booking_id) REFERENCES bookings(booking_id)
+);
+'''
+
+MYSQL_INDEXES = [
+    'CREATE INDEX idx_rooms_status ON rooms(status)',
+    'CREATE INDEX idx_bookings_customer_id ON bookings(customer_id)',
+    'CREATE INDEX idx_bookings_room_id ON bookings(room_id)',
+    'CREATE INDEX idx_bookings_status ON bookings(booking_status)',
+    'CREATE INDEX idx_bookings_check_in ON bookings(check_in_date)',
+    'CREATE INDEX idx_bookings_check_out ON bookings(check_out_date)',
+    'CREATE INDEX idx_booking_services_booking_id ON booking_services(booking_id)',
+    'CREATE INDEX idx_booking_services_service_id ON booking_services(service_id)',
+    'CREATE INDEX idx_bills_booking_id ON bills(booking_id)',
+    'CREATE INDEX idx_bills_status ON bills(payment_status)',
+    'CREATE INDEX idx_bills_date ON bills(bill_date)',
+    'CREATE INDEX idx_customers_phone ON customers(phone)',
+]
+
+SQLITE_TABLES = '''
+CREATE TABLE IF NOT EXISTS rooms (
+    room_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_number TEXT UNIQUE NOT NULL,
+    room_type TEXT NOT NULL,
+    price_per_night REAL NOT NULL,
+    status TEXT DEFAULT 'Available',
+    capacity INTEGER NOT NULL,
+    description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS customers (
+    customer_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT NOT NULL,
+    id_proof_type TEXT NOT NULL,
+    id_proof_number TEXT NOT NULL,
+    address TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bookings (
+    booking_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL,
+    room_id INTEGER NOT NULL,
+    check_in_date DATE NOT NULL,
+    check_out_date DATE,
+    number_of_guests INTEGER NOT NULL,
+    booking_status TEXT DEFAULT 'Active',
+    special_requests TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+    FOREIGN KEY (room_id) REFERENCES rooms(room_id)
+);
+
+CREATE TABLE IF NOT EXISTS services (
+    service_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_name TEXT NOT NULL,
+    service_price REAL NOT NULL,
     description TEXT
 );
 
@@ -147,81 +249,38 @@ CREATE TABLE IF NOT EXISTS booking_services (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     booking_id INTEGER NOT NULL,
     service_id INTEGER NOT NULL,
-    quantity INTEGER NOT NULL DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (booking_id) REFERENCES bookings (id),
-    FOREIGN KEY (service_id) REFERENCES services (id)
+    quantity INTEGER DEFAULT 1,
+    service_date DATE DEFAULT CURRENT_DATE,
+    FOREIGN KEY (booking_id) REFERENCES bookings(booking_id),
+    FOREIGN KEY (service_id) REFERENCES services(service_id)
 );
 
 CREATE TABLE IF NOT EXISTS bills (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bill_id INTEGER PRIMARY KEY AUTOINCREMENT,
     booking_id INTEGER NOT NULL,
-    room_charge REAL NOT NULL,
-    service_charge REAL NOT NULL,
+    room_charges REAL NOT NULL,
+    service_charges REAL DEFAULT 0,
+    tax_amount REAL NOT NULL,
+    discount REAL DEFAULT 0,
     total_amount REAL NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (booking_id) REFERENCES bookings (id)
-);
-'''
-
-MYSQL_SCHEMA = '''
-CREATE TABLE IF NOT EXISTS rooms (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    room_number VARCHAR(20) UNIQUE NOT NULL,
-    room_type VARCHAR(100) NOT NULL,
-    price DECIMAL(10,2) NOT NULL,
-    capacity INT NOT NULL,
-    description TEXT,
-    status VARCHAR(20) NOT NULL DEFAULT 'available'
+    payment_status TEXT DEFAULT 'Pending',
+    payment_method TEXT,
+    bill_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (booking_id) REFERENCES bookings(booking_id)
 );
 
-CREATE TABLE IF NOT EXISTS customers (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(150) NOT NULL,
-    email VARCHAR(150),
-    phone VARCHAR(30),
-    address TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS bookings (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    customer_id INT NOT NULL,
-    room_id INT NOT NULL,
-    check_in DATE NOT NULL,
-    check_out DATE,
-    status VARCHAR(20) NOT NULL DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (customer_id) REFERENCES customers (id),
-    FOREIGN KEY (room_id) REFERENCES rooms (id)
-);
-
-CREATE TABLE IF NOT EXISTS services (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(150) UNIQUE NOT NULL,
-    price DECIMAL(10,2) NOT NULL,
-    description TEXT
-);
-
-CREATE TABLE IF NOT EXISTS booking_services (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    booking_id INT NOT NULL,
-    service_id INT NOT NULL,
-    quantity INT NOT NULL DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (booking_id) REFERENCES bookings (id),
-    FOREIGN KEY (service_id) REFERENCES services (id)
-);
-
-CREATE TABLE IF NOT EXISTS bills (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    booking_id INT NOT NULL,
-    room_charge DECIMAL(10,2) NOT NULL,
-    service_charge DECIMAL(10,2) NOT NULL,
-    total_amount DECIMAL(10,2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (booking_id) REFERENCES bookings (id)
-);
+CREATE INDEX IF NOT EXISTS idx_rooms_status ON rooms(status);
+CREATE INDEX IF NOT EXISTS idx_bookings_customer_id ON bookings(customer_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_room_id ON bookings(room_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(booking_status);
+CREATE INDEX IF NOT EXISTS idx_bookings_check_in ON bookings(check_in_date);
+CREATE INDEX IF NOT EXISTS idx_bookings_check_out ON bookings(check_out_date);
+CREATE INDEX IF NOT EXISTS idx_booking_services_booking_id ON booking_services(booking_id);
+CREATE INDEX IF NOT EXISTS idx_booking_services_service_id ON booking_services(service_id);
+CREATE INDEX IF NOT EXISTS idx_bills_booking_id ON bills(booking_id);
+CREATE INDEX IF NOT EXISTS idx_bills_status ON bills(payment_status);
+CREATE INDEX IF NOT EXISTS idx_bills_date ON bills(bill_date);
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 '''
 
 
@@ -254,26 +313,6 @@ def _executescript(conn, script_text):
     return cursor
 
 
-def _table_exists(conn, table_name):
-    if isinstance(conn, sqlite3.Connection):
-        row = _execute(
-            conn,
-            'SELECT COUNT(*) AS cnt FROM sqlite_master WHERE type = ? AND name = ?',
-            ('table', table_name),
-        ).fetchone()
-        return bool(row['cnt'])
-    mysql_cfg = _mysql_connection_config()
-    if mysql_cfg is None:
-        raise RuntimeError('MySQL backend requires DATABASE_URL or DB_* env vars to be set.')
-    db_name = mysql_cfg['database']
-    row = _execute(
-        conn,
-        'SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = ? AND table_name = ?',
-        (db_name, table_name),
-    ).fetchone()
-    return bool(row['cnt'])
-
-
 def get_db_connection():
     """Create and return a database connection (SQLite or MySQL)."""
     if _uses_sqlite_backend():
@@ -304,12 +343,26 @@ def get_db_connection():
 
 
 def init_database():
-    """Create all tables if they don't already exist, then seed defaults."""
+    """Create all tables (and indexes) if they don't already exist, then seed defaults."""
     conn = get_db_connection()
     try:
-        schema = SQLITE_SCHEMA if isinstance(conn, sqlite3.Connection) else MYSQL_SCHEMA
-        _executescript(conn, schema)
-        conn.commit()
+        if isinstance(conn, sqlite3.Connection):
+            _executescript(conn, SQLITE_TABLES)
+            conn.commit()
+        else:
+            _executescript(conn, MYSQL_TABLES)
+            conn.commit()
+            cursor = conn.cursor()
+            for stmt in MYSQL_INDEXES:
+                try:
+                    cursor.execute(stmt)
+                except pymysql.err.OperationalError as exc:
+                    # 1061 = duplicate key name (index already exists) — safe to ignore
+                    if exc.args and exc.args[0] == 1061:
+                        continue
+                    raise
+            conn.commit()
+
         ensure_default_rooms(conn)
         ensure_default_services(conn)
         conn.commit()
@@ -324,11 +377,10 @@ def ensure_default_rooms(conn=None):
         conn = get_db_connection()
     try:
         row = _execute(conn, 'SELECT COUNT(*) AS cnt FROM rooms').fetchone()
-        count = row['cnt']
-        if not count:
+        if not row['cnt']:
             _executemany(
                 conn,
-                'INSERT INTO rooms (room_number, room_type, price, capacity, description) '
+                'INSERT INTO rooms (room_number, room_type, price_per_night, capacity, description) '
                 'VALUES (?, ?, ?, ?, ?)',
                 DEFAULT_ROOMS,
             )
@@ -346,11 +398,10 @@ def ensure_default_services(conn=None):
         conn = get_db_connection()
     try:
         row = _execute(conn, 'SELECT COUNT(*) AS cnt FROM services').fetchone()
-        count = row['cnt']
-        if not count:
+        if not row['cnt']:
             _executemany(
                 conn,
-                'INSERT INTO services (name, price, description) VALUES (?, ?, ?)',
+                'INSERT INTO services (service_name, service_price, description) VALUES (?, ?, ?)',
                 DEFAULT_SERVICES,
             )
         if own_conn:
@@ -374,20 +425,30 @@ def get_available_rooms():
     try:
         rows = _execute(
             conn,
-            "SELECT * FROM rooms WHERE status = 'available' ORDER BY room_number",
+            "SELECT * FROM rooms WHERE status = 'Available' ORDER BY room_number",
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
 
 
-def add_customer(name, email=None, phone=None, address=None):
+def get_room_by_id(room_id):
+    conn = get_db_connection()
+    try:
+        row = _execute(conn, 'SELECT * FROM rooms WHERE room_id = ?', (room_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def add_customer(first_name, last_name, email, phone, id_proof_type, id_proof_number, address=None):
     conn = get_db_connection()
     try:
         cursor = _execute(
             conn,
-            'INSERT INTO customers (name, email, phone, address) VALUES (?, ?, ?, ?)',
-            (name, email, phone, address),
+            'INSERT INTO customers (first_name, last_name, email, phone, id_proof_type, '
+            'id_proof_number, address) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (first_name, last_name, email, phone, id_proof_type, id_proof_number, address),
         )
         conn.commit()
         return cursor.lastrowid
@@ -395,20 +456,19 @@ def add_customer(name, email=None, phone=None, address=None):
         conn.close()
 
 
-def create_booking(customer_id, room_id, check_in, check_out=None):
+def create_booking(customer_id, room_id, check_in_date, number_of_guests, special_requests=None):
+    """Create a new active booking and mark the room Occupied. No check-out date yet."""
     conn = get_db_connection()
     try:
-        check_in = _as_date(check_in)
-        if check_out:
-            check_out = _as_date(check_out)
+        check_in_date = _as_date(check_in_date)
         cursor = _execute(
             conn,
-            'INSERT INTO bookings (customer_id, room_id, check_in, check_out, status) '
-            "VALUES (?, ?, ?, ?, 'active')",
-            (customer_id, room_id, check_in.isoformat(), check_out.isoformat() if check_out else None),
+            'INSERT INTO bookings (customer_id, room_id, check_in_date, check_out_date, '
+            "number_of_guests, booking_status, special_requests) VALUES (?, ?, ?, NULL, ?, 'Active', ?)",
+            (customer_id, room_id, check_in_date.isoformat(), number_of_guests, special_requests),
         )
         booking_id = cursor.lastrowid
-        _execute(conn, "UPDATE rooms SET status = 'occupied' WHERE id = ?", (room_id,))
+        _execute(conn, "UPDATE rooms SET status = 'Occupied' WHERE room_id = ?", (room_id,))
         conn.commit()
         return booking_id
     finally:
@@ -421,13 +481,13 @@ def get_active_bookings():
         rows = _execute(
             conn,
             '''
-            SELECT b.*, c.name AS customer_name, c.email AS customer_email,
-                   r.room_number, r.room_type, r.price AS room_price
+            SELECT b.*, c.first_name, c.last_name, c.email AS customer_email, c.phone,
+                   r.room_number, r.room_type, r.price_per_night
             FROM bookings b
-            JOIN customers c ON b.customer_id = c.id
-            JOIN rooms r ON b.room_id = r.id
-            WHERE b.status = 'active'
-            ORDER BY b.check_in
+            JOIN customers c ON b.customer_id = c.customer_id
+            JOIN rooms r ON b.room_id = r.room_id
+            WHERE b.booking_status = 'Active'
+            ORDER BY b.check_in_date
             ''',
         ).fetchall()
         return [dict(r) for r in rows]
@@ -441,12 +501,13 @@ def get_booking_by_id(booking_id):
         row = _execute(
             conn,
             '''
-            SELECT b.*, c.name AS customer_name, c.email AS customer_email,
-                   r.room_number, r.room_type, r.price AS room_price
+            SELECT b.*, c.first_name, c.last_name, c.email AS customer_email, c.phone,
+                   c.id_proof_type, c.id_proof_number, c.address,
+                   r.room_number, r.room_type, r.price_per_night, r.capacity
             FROM bookings b
-            JOIN customers c ON b.customer_id = c.id
-            JOIN rooms r ON b.room_id = r.id
-            WHERE b.id = ?
+            JOIN customers c ON b.customer_id = c.customer_id
+            JOIN rooms r ON b.room_id = r.room_id
+            WHERE b.booking_id = ?
             ''',
             (booking_id,),
         ).fetchone()
@@ -458,7 +519,7 @@ def get_booking_by_id(booking_id):
 def get_all_services():
     conn = get_db_connection()
     try:
-        rows = _execute(conn, 'SELECT * FROM services ORDER BY name').fetchall()
+        rows = _execute(conn, 'SELECT * FROM services ORDER BY service_name').fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
@@ -484,9 +545,9 @@ def get_booking_services(booking_id):
         rows = _execute(
             conn,
             '''
-            SELECT bs.*, s.name, s.price, s.description
+            SELECT bs.*, s.service_name, s.service_price, s.description
             FROM booking_services bs
-            JOIN services s ON bs.service_id = s.id
+            JOIN services s ON bs.service_id = s.service_id
             WHERE bs.booking_id = ?
             ''',
             (booking_id,),
@@ -496,81 +557,81 @@ def get_booking_services(booking_id):
         conn.close()
 
 
-def calculate_bill(booking_id):
-    """Compute room charge and service charge for a booking without saving it."""
+def calculate_bill(booking_id, check_out_date):
+    """Compute room/service/tax charges for a booking as of a given check-out date.
+
+    Room charges are price_per_night x nights x number_of_guests, matching the
+    per-person-per-night model used in the booking_details view in app.py.
+    Does not persist anything — see create_bill for that.
+    """
     booking = get_booking_by_id(booking_id)
     if not booking:
-        raise ValueError(f'Booking {booking_id} not found')
+        return None
 
-    check_in = _as_date(booking['check_in'])
-    check_out = _as_date(booking['check_out']) if booking.get('check_out') else date.today()
-    nights = max((check_out - check_in).days, 1)
+    check_in = _as_date(booking['check_in_date'])
+    check_out = _as_date(check_out_date)
+    nights = (check_out - check_in).days
+    if nights <= 0:
+        nights = 1
 
-    room_price = _to_float(booking['room_price'])
-    room_charge = room_price * nights
+    price_per_night = _to_float(booking['price_per_night'])
+    number_of_guests = booking['number_of_guests']
+    room_charges = price_per_night * nights * number_of_guests
 
     services = get_booking_services(booking_id)
-    service_charge = sum(_to_float(s['price']) * s['quantity'] for s in services)
+    service_charges = sum(_to_float(s['service_price']) * s['quantity'] for s in services)
 
-    total_amount = room_charge + service_charge
+    tax_amount = (room_charges + service_charges) * TAX_RATE
+    total_amount = room_charges + service_charges + tax_amount
+
     return {
         'booking_id': booking_id,
         'nights': nights,
-        'room_charge': room_charge,
-        'service_charge': service_charge,
+        'room_charges': room_charges,
+        'service_charges': service_charges,
+        'tax_amount': tax_amount,
         'total_amount': total_amount,
         'services': services,
     }
 
 
-def create_bill(booking_id):
-    """Calculate and persist a bill for a booking."""
-    bill_data = calculate_bill(booking_id)
+def create_bill(booking_id, room_charges, service_charges, tax_amount, discount, total_amount, payment_method):
+    """Persist a bill with precomputed charges (as calculated by calculate_bill)
+    and any discount already applied by the caller. Returns the new bill_id."""
     conn = get_db_connection()
     try:
         cursor = _execute(
             conn,
-            'INSERT INTO bills (booking_id, room_charge, service_charge, total_amount) '
-            'VALUES (?, ?, ?, ?)',
-            (
-                booking_id,
-                bill_data['room_charge'],
-                bill_data['service_charge'],
-                bill_data['total_amount'],
-            ),
+            'INSERT INTO bills (booking_id, room_charges, service_charges, tax_amount, '
+            "discount, total_amount, payment_status, payment_method) "
+            "VALUES (?, ?, ?, ?, ?, ?, 'Paid', ?)",
+            (booking_id, room_charges, service_charges, tax_amount, discount, total_amount, payment_method),
         )
         conn.commit()
-        bill_id = cursor.lastrowid
-        bill_data['id'] = bill_id
-        return bill_data
+        return cursor.lastrowid
     finally:
         conn.close()
 
 
-def checkout_booking(booking_id, check_out=None):
-    """Mark a booking as checked out, free the room, and generate its final bill."""
+def checkout_booking(booking_id, check_out_date, room_id):
+    """Mark a booking Checked Out and free the room. Does not create a bill —
+    call create_bill first, as app.py's /checkout route does."""
     conn = get_db_connection()
     try:
-        booking = get_booking_by_id(booking_id)
-        if not booking:
-            raise ValueError(f'Booking {booking_id} not found')
-
-        check_out_date = _as_date(check_out) if check_out else date.today()
+        checkout_date = _as_date(check_out_date)
         _execute(
             conn,
-            "UPDATE bookings SET status = 'checked_out', check_out = ? WHERE id = ?",
-            (check_out_date.isoformat(), booking_id),
+            "UPDATE bookings SET booking_status = 'Checked Out', check_out_date = ? WHERE booking_id = ?",
+            (checkout_date.isoformat(), booking_id),
         )
         _execute(
             conn,
-            "UPDATE rooms SET status = 'available' WHERE id = ?",
-            (booking['room_id'],),
+            "UPDATE rooms SET status = 'Available' WHERE room_id = ?",
+            (room_id,),
         )
         conn.commit()
     finally:
         conn.close()
-
-    return create_bill(booking_id)
 
 
 def get_bill_by_id(bill_id):
@@ -579,12 +640,14 @@ def get_bill_by_id(bill_id):
         row = _execute(
             conn,
             '''
-            SELECT bl.*, b.customer_id, c.name AS customer_name, r.room_number
+            SELECT bl.*, b.customer_id, b.room_id, b.check_in_date, b.check_out_date,
+                   b.number_of_guests, c.first_name, c.last_name, c.email AS customer_email,
+                   c.phone, r.room_number, r.room_type, r.price_per_night
             FROM bills bl
-            JOIN bookings b ON bl.booking_id = b.id
-            JOIN customers c ON b.customer_id = c.id
-            JOIN rooms r ON b.room_id = r.id
-            WHERE bl.id = ?
+            JOIN bookings b ON bl.booking_id = b.booking_id
+            JOIN customers c ON b.customer_id = c.customer_id
+            JOIN rooms r ON b.room_id = r.room_id
+            WHERE bl.bill_id = ?
             ''',
             (bill_id,),
         ).fetchone()
@@ -599,12 +662,12 @@ def get_all_bills():
         rows = _execute(
             conn,
             '''
-            SELECT bl.*, c.name AS customer_name, r.room_number
+            SELECT bl.*, c.first_name, c.last_name, r.room_number
             FROM bills bl
-            JOIN bookings b ON bl.booking_id = b.id
-            JOIN customers c ON b.customer_id = c.id
-            JOIN rooms r ON b.room_id = r.id
-            ORDER BY bl.created_at DESC
+            JOIN bookings b ON bl.booking_id = b.booking_id
+            JOIN customers c ON b.customer_id = c.customer_id
+            JOIN rooms r ON b.room_id = r.room_id
+            ORDER BY bl.bill_date DESC
             ''',
         ).fetchall()
         return [dict(r) for r in rows]
