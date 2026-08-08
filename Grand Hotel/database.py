@@ -662,7 +662,8 @@ def get_all_bills():
         rows = _execute(
             conn,
             '''
-            SELECT bl.*, c.first_name, c.last_name, r.room_number
+            SELECT bl.*, c.first_name, c.last_name, r.room_number,
+                   b.check_in_date, b.check_out_date
             FROM bills bl
             JOIN bookings b ON bl.booking_id = b.booking_id
             JOIN customers c ON b.customer_id = c.customer_id
