@@ -25,7 +25,10 @@ app.config['JSON_SORT_KEYS'] = False
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 3600  # Cache static files for 1 hour
 
 # Initialize database on first run
-db.init_database()
+# Initialize database only when explicitly needed — schema already exists in Aiven,
+# so skip 20 round-trips to the DB on every cold start.
+if os.environ.get('INIT_DB') == 'true':
+    db.init_database()
 
 @app.route('/')
 def index():
