@@ -105,7 +105,10 @@ def _mysql_connection_config():
 
 
 def _uses_sqlite_backend():
-    return not DATABASE_URL or DATABASE_URL.startswith('sqlite://')
+    if DATABASE_URL:
+        return DATABASE_URL.startswith('sqlite://')
+    # No DATABASE_URL set — fall back to MySQL if DB_* vars are configured
+    return not os.getenv("DB_NAME")
 
 
 # ---------------------------------------------------------------------------
